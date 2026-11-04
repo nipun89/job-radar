@@ -1,0 +1,12 @@
+# Your own data: never in the public repo
+config.yaml
+data/
+logs/
+backup/
+*.db
+Connections.csv
+messages.csv
+
+.venv/
+__pycache__/
+.pytest_cache/

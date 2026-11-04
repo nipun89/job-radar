@@ -1,0 +1,55 @@
+# Job Radar config.
+# On first run this file is copied to config.yaml. Edit config.yaml, not this file.
+# After editing, click "Run check now" in the dashboard (or run: python -m radar check).
+#
+# The defaults look for senior product management roles. Change the keywords for any
+# other kind of role (e.g. role_keywords: [software engineer], seniority_keywords: [staff, principal]).
+
+preferences:
+  # A title must contain one of these to count as the right kind of role
+  role_keywords: [product manager, pm-t, product management, product lead, head of product, director of product, product director, group product]
+  # ...and one of these to count as senior enough (a company can opt out with skip_seniority: true)
+  seniority_keywords: [staff, principal, lead, group, director, head of, senior staff]
+  # Titles containing any of these are dropped (whole-word match)
+  title_exclude: [associate, intern, product marketing, marketing manager, designer, engineer, analyst, product operations, recruiter, counsel, data scientist]
+  # The area you know best. Any hit in the title marks the role "High" fit; everything else is "Medium".
+  domain_keywords: [lending, loan, credit, capital, underwriting, risk, payments, payment, card, issuing, banking, treasury, financing, financial, money movement, billing, fraud]
+  # Roles here are tagged "Preferred location"
+  preferred_locations: [Seattle, Remote]
+  open_to_relocation: true      # true = keep roles anywhere in the US; false = preferred_locations only
+  us_only: true                 # drop roles whose locations are all outside the US
+  non_us_location_keywords: [London, Dublin, Ireland, United Kingdom, UK, Toronto, Vancouver, Canada, Singapore, Sydney, Melbourne, Australia, Hong Kong, Shanghai, Beijing, China, Bengaluru, Bangalore, Hyderabad, India, Tokyo, Japan, Paris, Berlin, Amsterdam, Netherlands, Germany, France, Spain, Madrid, Barcelona, Lisbon, Portugal, Mexico, São Paulo, Brazil, Bogota, Colombia, Tel Aviv, Israel, Dubai, Warsaw, Poland, Lithuania, Vilnius, Krakow, Stockholm, Zurich, Manila, Philippines, Chile, Santiago, Argentina, Buenos Aires, Norway, Oslo, United Arab Emirates, England, "Remote - EMEA", "Remote - APAC", "Remote - Canada"]
+  max_posting_age_days: 90      # ignore roles posted longer ago than this when first found
+  workday_search_text: product manager   # Workday boards are searched server-side with this text
+
+companies:
+  # ats: greenhouse | ashby | lever | workday | amazon | manual
+  #   Find it from any job link on the company's site:
+  #     boards.greenhouse.io/<board>/jobs/...      -> ats: greenhouse, board: <board>
+  #     jobs.ashbyhq.com/<board>/...               -> ats: ashby,      board: <board>
+  #     jobs.lever.co/<board>/...                  -> ats: lever,      board: <board>
+  #     <tenant>.wdN.myworkdayjobs.com/<site>/...  -> ats: workday,    board: <tenant>|wdN|<site>
+  #     no feed at all                             -> ats: manual,     url: <careers page>
+  # match: employer names (as LinkedIn shows them) that count as this company, for contacts
+  # exclude: look-alike employer names to ignore
+  # paused: true = stop fetching and hide its roles (contacts still shown)
+  # skip_seniority: true = don't require a seniority keyword (for companies that post plain "Product Manager")
+  # only_contacts: [Full Name] = show just these people for that company
+  - {name: Stripe,      ats: greenhouse, board: stripe,    match: [Stripe]}
+  - {name: Brex,        ats: greenhouse, board: brex,      match: [Brex]}
+  - {name: Affirm,      ats: greenhouse, board: affirm,    match: [Affirm]}
+  - {name: Chime,       ats: greenhouse, board: chime,     match: [Chime]}
+  - {name: Coinbase,    ats: greenhouse, board: coinbase,  match: [Coinbase]}
+  - {name: Robinhood,   ats: greenhouse, board: robinhood, match: [Robinhood]}
+  - {name: Gusto,       ats: greenhouse, board: gusto,     match: [Gusto]}
+  - {name: Block,       ats: greenhouse, board: block,     match: [Block, Square, Cash App, Afterpay], exclude: [Clark Square Capital]}
+  - {name: Ramp,        ats: ashby,      board: ramp,      match: [Ramp]}
+  - {name: Plaid,       ats: ashby,      board: plaid,     match: [Plaid]}
+  - {name: Anthropic,   ats: greenhouse, board: anthropic, match: [Anthropic], skip_seniority: true}
+  - {name: OpenAI,      ats: ashby,      board: openai,    match: [OpenAI], skip_seniority: true}
+  - {name: Capital One, ats: workday,    board: capitalone|wd12|Capital_One, match: [Capital One]}
+  - {name: Expedia,     ats: workday,    board: expedia|wd108|search, match: [Expedia, Expedia Group]}
+  - {name: Zillow,      ats: workday,    board: zillow|wd5|Zillow_Group_External, match: [Zillow, Zillow Group]}
+  # Amazon has its own search API: board = a list of search phrases
+  - {name: Amazon,      ats: amazon,     board: [principal product manager payments, principal product manager fintech], match: [Amazon, Amazon Web Services, AWS]}
+  - {name: Google,      ats: manual,     url: "https://www.google.com/about/careers/applications/jobs/results/?q=%22product%20manager%22", match: [Google]}

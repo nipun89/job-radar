@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}Job Radar{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Fonts (Google Fonts). If offline, the page falls back to the system font. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+  <!-- Layout first, then the theme's colours and spacing (static/themes/graphite.css) -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='themes/graphite.css') }}">
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="{{ url_for('radar_page') }}">Job Radar</a>{% if demo %}<span class="demo-badge" title="Sample data in data/demo/. Your real data is untouched.">DEMO</span>{% endif %}
+  <nav>
+    <a href="{{ url_for('radar_page') }}" class="{{ 'active' if request.endpoint == 'radar_page' }}">Radar <span class="count">{{ nav_radar }}</span></a>
+    <a href="{{ url_for('pipeline_page') }}" class="{{ 'active' if request.endpoint == 'pipeline_page' }}">Pipeline <span class="count">{{ nav_pipeline }}</span></a>
+    <a href="{{ url_for('contacts_page') }}" class="{{ 'active' if request.endpoint == 'contacts_page' }}">Contacts</a>
+    <a href="{{ url_for('companies_page') }}" class="{{ 'active' if request.endpoint == 'companies_page' }}">Companies</a>
+  </nav>
+  <div class="run">
+    {% if last_run %}<span class="muted small">Last check {{ last_run.run_at[5:16].replace('T', ' ') }}</span>{% endif %}
+    <form method="post" action="{{ url_for('run_now') }}"
+          onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').textContent='Checking… (about a minute)';">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      <button class="btn">Run check now</button>
+    </form>
+  </div>
+</header>
+
+<main>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, msg in messages %}
+      {% if category == 'summary' %}
+        <details class="flash" open><summary>Check finished</summary><pre>{{ msg }}</pre></details>
+      {% else %}
+        <div class="flash {{ category }}">{{ msg }}</div>
+      {% endif %}
+    {% endfor %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</main>
+
+</body>
+</html>

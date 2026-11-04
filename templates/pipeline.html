@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Pipeline · Job Radar{% endblock %}
+
+{# One row in a pipeline table. Inputs use form="f-ID" so a whole table row can be one form. #}
+{% macro item_row(it) %}
+  <tr id="item-{{ it.id }}">
+    <td class="nowrap"><b>{{ it.company }}</b></td>
+    <td>
+      {% if it.url %}<a href="{{ it.url }}" target="_blank" rel="noopener">{{ it.title }}</a>{% else %}{{ it.title }}{% endif %}
+      <div class="small muted">
+        {% if it.job_key %}from Radar{% if it.fit %} · <span class="fit {{ it.fit|lower }}">{{ it.fit }}</span>{% endif %}{% else %}added by hand{% endif %}
+        {% if it.location %} · {{ it.location[:60] }}{% endif %}
+        {% if it.posting_state == 'Closed' %} · <span class="tag muted-tag">posting closed</span>{% endif %}
+      </div>
+    </td>
+    <td>
+      <select name="stage" form="f-{{ it.id }}" onchange="this.form.requestSubmit()">
+        {% for s in stages %}<option {{ 'selected' if it.stage == s }}>{{ s }}</option>{% endfor %}
+      </select>
+    </td>
+    <td>
+      <select name="referral" form="f-{{ it.id }}" onchange="this.form.requestSubmit()">
+        {% for r in referrals %}<option value="{{ r }}" {{ 'selected' if (it.referral or '') == r }}>{{ r or '—' }}</option>{% endfor %}
+      </select>
+    </td>
+    <td>
+      <input name="contact" form="f-{{ it.id }}" value="{{ it.contact or '' }}" list="people-{{ it.id }}" placeholder="who?" class="w-contact">
+      <datalist id="people-{{ it.id }}">
+        {% for p in it.people %}<option value="{{ p.first_name }} {{ p.last_name }}">{{ p.position }}</option>{% endfor %}
+      </datalist>
+      {% if it.contact_url %}<a class="small" href="{{ it.contact_url }}" target="_blank" rel="noopener" title="LinkedIn">in</a>{% endif %}
+      {% if it.people and not it.contact %}<div class="small muted">{{ it.people|length }} you know here</div>{% endif %}
+    </td>
+    <td><input type="date" name="date_applied" form="f-{{ it.id }}" value="{{ it.date_applied or '' }}"></td>
+    <td><textarea name="notes" form="f-{{ it.id }}" rows="1" placeholder="notes">{{ it.notes or '' }}</textarea></td>
+    <td class="nowrap">
+      <form id="f-{{ it.id }}" method="post" action="{{ url_for('pipeline_update', item_id=it.id) }}" class="inline">
+        <button class="btn small-btn">Save</button>
+      </form>
+      <form method="post" action="{{ url_for('pipeline_remove', item_id=it.id) }}" class="inline"
+            onsubmit='return confirm({{ ("Remove " ~ it.company ~ ", " ~ it.title ~ " from your pipeline?")|tojson }});'>
+        <button class="link-btn" title="Remove from pipeline">✕</button>
+      </form>
+    </td>
+  </tr>
+{% endmacro %}
+
+{% macro table_head() %}
+  <thead><tr><th>Company</th><th>Role</th><th>Stage</th><th>Referral</th><th>Contact</th><th>Applied</th><th>Notes</th><th></th></tr></thead>
+{% endmacro %}
+
+{% block content %}
+
+<div class="page-head">
+  <h1>Pipeline</h1>
+  <p class="muted">Roles you're pursuing. Changing Stage or Referral saves right away. For contact, date or notes, click <b>Save</b>.</p>
+</div>
+
+<section class="stats">
+  <div class="funnel">
+    {% for s in ['Interested', 'Applied', 'Interviewing', 'Offer'] %}
+      <a href="#{{ 'need-outreach' if s == 'Interested' else 'stage-' ~ s }}" class="stat"><span class="num">{{ stats.by_stage[s] }}</span><span class="label">{{ s }}</span>
+        {% if s == 'Interested' %}<span class="sub">{{ stats.need_outreach }} to reach out · {{ stats.waiting }} waiting</span>{% endif %}</a>
+      {% if not loop.last %}<span class="arrow">→</span>{% endif %}
+    {% endfor %}
+    <a href="#closed" class="stat muted-stat"><span class="num">{{ stats.by_stage['Rejected'] + stats.by_stage['Withdrawn'] + stats.by_stage['Closed'] }}</span><span class="label">Closed</span></a>
+  </div>
+  <div class="week small">
+    <b>Last 7 days:</b>
+    {{ stats.week.interested }} marked interested ·
+    {{ stats.week.outreach }} referral outreach ·
+    {{ stats.week.applied }} applied ·
+    {{ stats.week.interviewing }} moved to interviewing
+  </div>
+</section>
+
+<details class="add-form" {{ 'open' if stats.active == 0 and not closed }}>
+  <summary>+ Add a role you found elsewhere</summary>
+  <form method="post" action="{{ url_for('pipeline_add') }}" class="add-grid">
+    <label>Company <input name="company" required></label>
+    <label>Role <input name="title" required></label>
+    <label class="span2">Link <input name="url" type="url" placeholder="https://"></label>
+    <label>Location <input name="location"></label>
+    <label>Stage
+      <select name="stage">{% for s in stages %}<option>{{ s }}</option>{% endfor %}</select>
+    </label>
+    <label>Referral
+      <select name="referral">{% for r in referrals %}<option value="{{ r }}">{{ r or '—' }}</option>{% endfor %}</select>
+    </label>
+    <label>Contact <input name="contact"></label>
+    <label>Applied on <input name="date_applied" type="date"></label>
+    <label class="span2">Notes <input name="notes"></label>
+    <div><button class="btn">Add to Pipeline</button></div>
+  </form>
+</details>
+
+{% for g in groups %}
+  <section class="stage" id="{{ g.id }}">
+    <h2>{{ g.title }} <span class="count">{{ g['items']|length }}</span></h2>
+    {% if g.hint %}<p class="muted small stage-hint">{{ g.hint }}</p>{% endif %}
+    {% if g['items'] %}
+      <table class="grid pipeline">{{ table_head() }}<tbody>{% for it in g['items'] %}{{ item_row(it) }}{% endfor %}</tbody></table>
+    {% else %}
+      <p class="empty small">Nothing here yet.</p>
+    {% endif %}
+  </section>
+{% endfor %}
+
+<section class="stage" id="closed">
+  <details {{ 'open' if request.args.get('closed') }}>
+    <summary><h2 class="inline-h">Closed <span class="count">{{ closed|length }}</span></h2> <span class="muted small">Rejected, withdrawn or closed</span></summary>
+    {% if closed %}
+      <table class="grid pipeline">{{ table_head() }}<tbody>{% for it in closed %}{{ item_row(it) }}{% endfor %}</tbody></table>
+    {% else %}
+      <p class="empty small">Nothing closed.</p>
+    {% endif %}
+  </details>
+</section>
+
+{% endblock %}

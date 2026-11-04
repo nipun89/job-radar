@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Contacts · Job Radar{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <h1>Contacts</h1>
+  <p class="muted">People you know at tracked companies. Fill in <b>How I know</b> and <b>Strength</b>: Strong and Medium contacts are listed first on the Radar.</p>
+</div>
+
+<div class="filters">
+  <form method="get" class="grow-form">
+    <label class="grow">Search <input type="search" name="q" value="{{ q }}" placeholder="name, company, position, how I know"></label>
+    <button class="btn secondary">Search</button>
+    {% if q %}<a class="small" href="{{ url_for('contacts_page') }}">Clear</a>{% endif %}
+  </form>
+  <form method="post" action="{{ url_for('contacts_import') }}">
+    <button class="btn secondary" {{ 'disabled' if not csv_exists }} title="{{ csv_path }}">Re-import Connections.csv</button>
+  </form>
+</div>
+
+<p class="muted small">{{ rows|length }} contact{{ '' if rows|length == 1 else 's' }}</p>
+
+<table class="grid">
+  <thead><tr><th>Tracked as</th><th>Name</th><th>Their company</th><th>Position</th><th>How I know</th><th>Strength</th><th></th></tr></thead>
+  <tbody>
+  {% for p in rows %}
+    <tr>
+      <td class="nowrap">{{ p.tracked }}</td>
+      <td class="nowrap"><a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.first_name }} {{ p.last_name }}</a></td>
+      <td class="small">{{ p.company }}</td>
+      <td class="small">{{ p.position }}</td>
+      <td><input name="how_i_know" form="c-{{ loop.index }}" value="{{ p.how_i_know or '' }}" placeholder="e.g. worked together at Stripe" class="w-wide"></td>
+      <td>
+        <select name="strength" form="c-{{ loop.index }}">
+          {% for s in strengths %}<option value="{{ s }}" {{ 'selected' if (p.strength or '') == s }}>{{ s or '—' }}</option>{% endfor %}
+        </select>
+      </td>
+      <td>
+        <form id="c-{{ loop.index }}" method="post" action="{{ url_for('contacts_update') }}">
+          <input type="hidden" name="url" value="{{ p.url }}">
+          <input type="hidden" name="next" value="{{ request.full_path }}">
+          <button class="btn small-btn">Save</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

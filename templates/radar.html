@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Radar · Job Radar{% endblock %}
+{# Sortable column header. Keeps the current filters in the link. #}
+{% macro sort_th(key, label) %}
+  {% set first_dir = sorts[key][1] %}
+  {% set next_dir = ('asc' if direction == 'desc' else 'desc') if sort == key else first_dir %}
+  {% set args = request.args.to_dict() %}
+  {% set _ = args.update({'sort': key, 'dir': next_dir}) %}
+  <th class="sortable {{ 'sorted' if sort == key }}">
+    <a href="{{ url_for('radar_page', **args) }}" title="Sort by {{ label|lower }}">{{ label }}
+      <span class="arrow">{% if sort == key %}{{ '▲' if direction == 'asc' else '▼' }}{% else %}↕{% endif %}</span></a>
+  </th>
+{% endmacro %}
+
+{% block content %}
+
+<div class="page-head">
+  <h1>Radar</h1>
+  <p class="muted">Roles the daily check found that you haven't moved on yet. Click <b>Interested</b> to move one to your Pipeline. Anything you skip just stays here.</p>
+</div>
+
+<form class="filters" method="get">
+  <label>Fit
+    <select name="fit">
+      <option value="">All</option>
+      {% for v in ['High', 'Medium'] %}<option {{ 'selected' if f.fit == v }}>{{ v }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Company
+    <select name="company">
+      <option value="">All</option>
+      {% for c in companies %}<option {{ 'selected' if f.company == c }}>{{ c }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Found
+    <select name="found">
+      <option value="">Any time</option>
+      {% for d, label in [('1', 'Today'), ('7', 'Last 7 days'), ('30', 'Last 30 days')] %}
+        <option value="{{ d }}" {{ 'selected' if f.found == d }}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Posting
+    <select name="posting">
+      {% for v, label in [('Open', 'Open'), ('Closed', 'Closed'), ('', 'Both')] %}
+        <option value="{{ v }}" {{ 'selected' if f.posting == v }}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label class="grow">Search
+    <input type="search" name="q" value="{{ f.q }}" placeholder="title, company, location">
+  </label>
+  {% if sort %}<input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ direction }}">{% endif %}
+  <button class="btn secondary">Filter</button>
+  {% if f.fit or f.company or f.found or f.q or f.posting != 'Open' or sort %}<a class="small" href="{{ url_for('radar_page') }}">Clear</a>{% endif %}
+</form>
+
+<p class="muted small">{{ rows|length }} role{{ '' if rows|length == 1 else 's' }}</p>
+
+{% if rows %}
+<table class="grid">
+  <thead>
+    <tr>
+      {{ sort_th('found', 'Found') }}{{ sort_th('posted', 'Posted') }}{{ sort_th('company', 'Company') }}{{ sort_th('role', 'Role') }}
+      {{ sort_th('location', 'Location') }}{{ sort_th('fit', 'Fit') }}{{ sort_th('contacts', 'Who you know') }}<th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in rows %}
+    <tr class="{{ 'closed' if r.posting_state == 'Closed' }}">
+      <td class="nowrap">
+        {{ r.date_found[5:] }}
+        {% if r.date_found == today %}<span class="tag new">new</span>{% endif %}
+      </td>
+      <td class="nowrap small">{{ r.date_posted[5:] if r.date_posted else '—' }}</td>
+      <td class="nowrap"><b>{{ r.company }}</b></td>
+      <td>
+        <a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.title }}</a>
+        {% if r.posting_state == 'Closed' %}<span class="tag muted-tag">posting closed {{ r.closed_on or '' }}</span>{% endif %}
+      </td>
+      <td class="small">{{ r.location }}</td>
+      <td><span class="fit {{ r.fit|lower }}" title="{{ r.fit_reason }}">{{ r.fit }}</span></td>
+      <td class="small">
+        {% if r.contacts %}
+          {% for p in r.contacts[:3] %}
+            <a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.first_name }} {{ p.last_name }}</a>{% if p.how_i_know %} <span class="muted">({{ p.how_i_know }})</span>{% endif %}{{ ',' if not loop.last }}
+          {% endfor %}
+          {% if r.contacts|length > 3 %}
+            <details class="more"><summary>+{{ r.contacts|length - 3 }} more</summary>
+              {% for p in r.contacts[3:] %}
+                <div><a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.first_name }} {{ p.last_name }}</a> <span class="muted">{{ p.position }}</span></div>
+              {% endfor %}
+            </details>
+          {% endif %}
+        {% else %}<span class="muted">—</span>{% endif %}
+      </td>
+      <td>
+        <form method="post" action="{{ url_for('interested') }}">
+          <input type="hidden" name="job_key" value="{{ r.job_key }}">
+          <input type="hidden" name="next" value="{{ request.full_path }}">
+          <button class="btn">Interested</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <p class="empty">Nothing matches. Try clearing the filters, or click <b>Run check now</b>.</p>
+{% endif %}
+
+{% if manual %}
+<section class="manual">
+  <h2>Check by hand</h2>
+  <p class="muted small">These companies have no feed we can read. Have a look now and then.</p>
+  <p>{% for co in manual %}<a href="{{ co.url }}" target="_blank" rel="noopener">{{ co.name }}</a>{{ ' · ' if not loop.last }}{% endfor %}</p>
+</section>
+{% endif %}
+
+{% endblock %}

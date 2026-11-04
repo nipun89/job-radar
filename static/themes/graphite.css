@@ -1,0 +1,16 @@
+/* Graphite: dark mode, off-white text, muted steel-blue accents. */
+:root {
+  --bg: #111214; --surface: #18191c; --surface-2: #202226; --row-hover: #1f2531; --stripe: #1b1c1f;
+  --ink: #f0f0f0; --body: #d2d3d6; --mute: #8d9097; --faint: #5d6066;
+  --line: #2c2e33; --line-soft: #232529; --col-line: #222428;
+  --accent: #4e6f9c; --accent-hover: #5c7fae; --accent-ink: #ffffff; --accent-soft: #23304a; --link: #8fb0dc;
+  --good: #7fbf98; --good-soft: #1d3327;
+  --bad: #e08a8a; --bad-soft: #3a2224;
+  --info: #8fb0dc; --info-soft: #23304a;
+  --hi-soft: #3a3220; --hi-line: #8f7a3a;
+  --focus-ring: rgba(143, 176, 220, 0.4);
+  --font: Inter, "Segoe UI", system-ui, sans-serif;
+  --fs: 12.5px; --fs-sm: 11.5px; --fs-xs: 10.5px;
+  --cell-y: 4px; --cell-x: 8px; --control-h: 25px; --radius: 3px;
+}
+:root { color-scheme: dark; }   /* dark scrollbars, date pickers and dropdowns */
