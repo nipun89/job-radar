@@ -23,7 +23,7 @@ preferences:
   workday_search_text: product manager   # Workday boards are searched server-side with this text
 
 companies:
-  # ats: greenhouse | ashby | lever | workday | amazon | manual
+  # ats: greenhouse | ashby | lever | workday | amazon | microsoft | manual
   #   Find it from any job link on the company's site:
   #     boards.greenhouse.io/<board>/jobs/...      -> ats: greenhouse, board: <board>
   #     jobs.ashbyhq.com/<board>/...               -> ats: ashby,      board: <board>
@@ -50,6 +50,7 @@ companies:
   - {name: Capital One, ats: workday,    board: capitalone|wd12|Capital_One, match: [Capital One]}
   - {name: Expedia,     ats: workday,    board: expedia|wd108|search, match: [Expedia, Expedia Group]}
   - {name: Zillow,      ats: workday,    board: zillow|wd5|Zillow_Group_External, match: [Zillow, Zillow Group]}
-  # Amazon has its own search API: board = a list of search phrases
+  # Amazon and Microsoft have their own search APIs: board = a list of search phrases
+  #   e.g. {name: Microsoft, ats: microsoft, board: [principal product manager], match: [Microsoft]}
   - {name: Amazon,      ats: amazon,     board: [principal product manager payments, principal product manager fintech], match: [Amazon, Amazon Web Services, AWS]}
   - {name: Google,      ats: manual,     url: "https://www.google.com/about/careers/applications/jobs/results/?q=%22product%20manager%22", match: [Google]}

@@ -169,12 +169,44 @@ def fetch_amazon(board, prefs):
     return list(seen.values())
 
 
+def fetch_microsoft(board, prefs, pages=10, pause=1.0):
+    """Microsoft's careers site search (apply.careers.microsoft.com). Like Amazon,
+    board = a list of search phrases. US only, 10 results a page, up to `pages` pages
+    per phrase, one request a second: the site rate-limits fast clients (HTTP 429)."""
+    import time
+    phrases = board if isinstance(board, list) else [board]
+    base = "https://apply.careers.microsoft.com"
+    seen = {}
+    for phrase in phrases:
+        for page in range(pages):
+            if seen or page:
+                time.sleep(pause)
+            r = requests.get(f"{base}/api/pcsx/search", headers=HEADERS, timeout=TIMEOUT, params={
+                "domain": "microsoft.com", "query": phrase, "location": "United States", "start": page * 10})
+            r.raise_for_status()
+            positions = (r.json().get("data") or {}).get("positions") or []
+            for j in positions:
+                jid = str(j.get("id"))
+                ts = j.get("postedTs") or j.get("creationTs")
+                seen.setdefault(jid, {
+                    "id": jid,
+                    "title": j.get("name", ""),
+                    "location": "; ".join(j.get("standardizedLocations") or j.get("locations") or []),
+                    "url": base + (j.get("positionUrl") or f"/careers/job/{jid}"),
+                    "posted": datetime.fromtimestamp(ts, tz=timezone.utc).date().isoformat() if ts else None,
+                })
+            if len(positions) < 10:
+                break
+    return list(seen.values())
+
+
 FETCHERS = {
     "greenhouse": fetch_greenhouse,
     "ashby": fetch_ashby,
     "lever": fetch_lever,
     "workday": fetch_workday,
     "amazon": fetch_amazon,
+    "microsoft": fetch_microsoft,
 }
 
 
