@@ -104,6 +104,14 @@ CREATE TABLE IF NOT EXISTS company_feeds (
     checked_on TEXT
 );
 
+-- Pay looked up from a posting's own page (for titles with no seniority word).
+-- Looked up once per posting; pay_max NULL = the posting doesn't state it.
+CREATE TABLE IF NOT EXISTS pay_cache (
+    job_key    TEXT PRIMARY KEY,
+    pay_max    INTEGER,
+    checked_on TEXT
+);
+
 -- Last result per company, shown on the Companies page.
 CREATE TABLE IF NOT EXISTS company_results (
     company  TEXT PRIMARY KEY,

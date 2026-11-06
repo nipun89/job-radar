@@ -110,7 +110,7 @@ def verify_feed(feed, prefs, skip_seniority=False):
     except Exception as e:
         return {"ok": False, "scanned": 0, "matched": 0, "sample": [], "error": f"{type(e).__name__}: {e}"[:300]}
     hits = [p["title"] for p in postings
-            if evaluate(p["title"], p["location"], prefs, skip_seniority=skip_seniority)[0]]
+            if evaluate(p["title"], p["location"], prefs, skip_seniority, p.get("pay_max"))[0]]
     # No matches: show role-looking titles instead, so you can see why (e.g. no seniority word)
     near = [p["title"] for p in postings
             if any(k in p["title"].lower() for k in prefs.get("role_keywords", []))]

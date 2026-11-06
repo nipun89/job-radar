@@ -6,8 +6,8 @@ Safe to run many times a day: existing jobs are never duplicated or overwritten.
 from datetime import datetime
 
 from radar import db
-from radar.fetchers import fetch_company
-from radar.filters import evaluate, too_old
+from radar.fetchers import fetch_company, lookup_pay
+from radar.filters import NO_LEVEL, evaluate, too_old
 from radar.tracking import refresh_feeds
 
 
@@ -53,8 +53,14 @@ def run_check(config=None, conn=None):
         for p in postings:
             key = f"{name}|{p['id']}"
             seen_keys.add(key)
-            keep, fit, reason, _ = evaluate(p["title"], p["location"], prefs,
-                                            skip_seniority=company.get("skip_seniority", False))
+            skip = company.get("skip_seniority", False)
+            keep, fit, reason, why = evaluate(p["title"], p["location"], prefs, skip, p.get("pay_max"))
+            # Safety catch: no seniority word in the title, but maybe the pay says senior
+            if (why == NO_LEVEL and p.get("pay_max") is None and prefs.get("min_pay_without_seniority")
+                    and (key in already or not too_old(p["posted"], prefs))):
+                pay = cached_pay(conn, company, key, p)
+                if pay:
+                    keep, fit, reason, why = evaluate(p["title"], p["location"], prefs, skip, pay)
             if not keep:
                 continue
             matched += 1
@@ -92,6 +98,19 @@ def run_check(config=None, conn=None):
                "scanned": total_scanned, "new": total_new, "errors": errors}
     _append_log(summary)
     return summary
+
+
+def cached_pay(conn, company, key, posting):
+    """Pay from the posting's own page, looked up once and remembered in pay_cache."""
+    row = conn.execute("SELECT pay_max FROM pay_cache WHERE job_key=?", (key,)).fetchone()
+    if row:
+        return row["pay_max"]
+    try:
+        pay = lookup_pay(company, posting)
+    except Exception:
+        return None   # try again next run
+    conn.execute("INSERT OR REPLACE INTO pay_cache VALUES (?,?,?)", (key, pay, db.today()))
+    return pay
 
 
 def _append_log(s):

@@ -75,3 +75,20 @@ def test_feed_from_saved_links():
     from radar.tracking import feed_from_urls
     assert feed_from_urls(["https://servicetitan.wd1.myworkdayjobs.com/ServiceTitan/job/US-Remote/x_JR1"]) == ("workday", "servicetitan|wd1|ServiceTitan")
     assert feed_from_urls(["https://wellfound.com/jobs/1-x"]) is None
+
+
+def test_pay_safety_catch_for_titles_without_a_level():
+    from radar.filters import NO_LEVEL
+    p = {**PREFS, "min_pay_without_seniority": 250000}
+    title, loc = "Product Manager, Financial Management", "San Francisco HQ; Remote"
+    assert evaluate(title, loc, p)[3] == NO_LEVEL                     # pay unknown
+    assert evaluate(title, loc, p, pay_max=226800)[3] == NO_LEVEL     # below the bar
+    keep, fit, reason, _ = evaluate(title, loc, p, pay_max=262800)
+    assert keep and fit == "High" and "pays up to $263K" in reason
+    off = {k: v for k, v in p.items() if k != "min_pay_without_seniority"}
+    assert evaluate(title, loc, off, pay_max=900000)[3] == NO_LEVEL    # catch is off without the setting
+    assert evaluate("Product Manager", "London, UK", p, pay_max=300000)[3] == "non-US location"
+    # A title that states a lower level never gets the catch
+    assert evaluate("Senior Product Manager, Checkout", loc, p, pay_max=300000)[3] == "lower level: senior"
+    assert evaluate("Sr. Product Manager, Loyalty", loc, p, pay_max=300000)[3] == "lower level: sr"
+    assert evaluate("Senior Staff Product Manager", loc, p)[0]          # has a real level word: fine

@@ -1,10 +1,16 @@
 """One function per careers system (ATS). Each returns a list of dicts:
 
-    {"id": str, "title": str, "location": str, "url": str, "posted": "YYYY-MM-DD" or None}
+    {"id": str, "title": str, "location": str, "url": str, "posted": "YYYY-MM-DD" or None,
+     "pay_max": int or None}   # only where the feed itself includes pay (Ashby, Lever)
+
+For the rest, lookup_pay() reads one posting's page. The daily run only calls it for
+postings that pass every filter except seniority, and caches the answer.
 
 These all read public JSON feeds. No HTML scraping, and never LinkedIn.
 """
+import html
 import re
+import time
 from datetime import date, datetime, timedelta, timezone
 
 import requests
@@ -38,8 +44,30 @@ def fetch_greenhouse(board, prefs):
     return out
 
 
+# One amount: "$190,800", "$190.8K", "$ 305,000"
+_AMOUNT = r"\$\s?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?\s?[Kk]\b)"
+# A pay range: "$184,000 - $230,000", "$190.8K – $262.8K", "$139,900 to USD $274,800"
+_RANGE = re.compile(_AMOUNT + r"\s*(?:-|–|—|to)\s*(?:USD\s*)?" + _AMOUNT)
+
+
+def _dollars(raw):
+    raw = raw.replace(",", "").replace(" ", "")
+    return float(raw[:-1]) * 1000 if raw[-1] in "Kk" else float(raw)
+
+
+def pay_from_text(text):
+    """Top of the highest annual pay range in a job description, else None.
+    Only ranges count, so a stray "$400K in savings" in the pitch is ignored,
+    as are hourly ranges ($30K-$2M only)."""
+    plain = html.unescape(re.sub(r"<[^>]+>", " ", html.unescape(text or "")))
+    tops = [int(_dollars(m.group(2))) for m in _RANGE.finditer(plain)]
+    tops = [t for t in tops if 30_000 <= t <= 2_000_000]
+    return max(tops) if tops else None
+
+
 def fetch_ashby(board, prefs):
-    r = requests.get(f"https://api.ashbyhq.com/posting-api/job-board/{board}", headers=HEADERS, timeout=TIMEOUT)
+    r = requests.get(f"https://api.ashbyhq.com/posting-api/job-board/{board}", params={"includeCompensation": "true"},
+                     headers=HEADERS, timeout=TIMEOUT)
     r.raise_for_status()
     out = []
     for j in r.json().get("jobs", []):
@@ -55,8 +83,16 @@ def fetch_ashby(board, prefs):
             "location": "; ".join(l for l in locs if l),
             "url": j.get("jobUrl", ""),
             "posted": _iso_to_date(j.get("publishedAt")),
+            "pay_max": _ashby_pay(j),
         })
     return out
+
+
+def _ashby_pay(job):
+    comps = (job.get("compensation") or {}).get("summaryComponents") or []
+    tops = [c.get("maxValue") for c in comps if c.get("compensationType") == "Salary"
+            and c.get("interval") == "1 YEAR" and (c.get("currencyCode") or "USD") == "USD" and c.get("maxValue")]
+    return int(max(tops)) if tops else None
 
 
 def fetch_lever(board, prefs):
@@ -72,9 +108,16 @@ def fetch_lever(board, prefs):
             "title": j.get("text", ""),
             "location": "; ".join(l for l in locs if l),
             "url": j.get("hostedUrl", ""),
+            "pay_max": _lever_pay(j.get("salaryRange")),
             "posted": datetime.fromtimestamp(created / 1000, tz=timezone.utc).date().isoformat() if created else None,
         })
     return out
+
+
+def _lever_pay(salary):
+    if salary and "year" in (salary.get("interval") or "") and (salary.get("currency") or "USD") == "USD" and salary.get("max"):
+        return int(salary["max"])
+    return None
 
 
 def _workday_posted(text):
@@ -169,19 +212,28 @@ def fetch_amazon(board, prefs):
     return list(seen.values())
 
 
-def fetch_microsoft(board, prefs, pages=10, pause=1.0):
+def _get_patiently(url, params, waits=(15, 30, 60, 90), sleep=time.sleep):
+    """GET, and when the site says "too many requests" (HTTP 429), wait and try again."""
+    for wait in (*waits, None):
+        r = requests.get(url, headers=HEADERS, timeout=TIMEOUT, params=params)
+        if r.status_code != 429 or wait is None:
+            return r
+        sleep(wait)
+
+
+def fetch_microsoft(board, prefs, pages=5, pause=3.0, sleep=time.sleep):
     """Microsoft's careers site search (apply.careers.microsoft.com). Like Amazon,
     board = a list of search phrases. US only, 10 results a page, up to `pages` pages
-    per phrase, one request a second: the site rate-limits fast clients (HTTP 429)."""
-    import time
+    per phrase. The site rate-limits hard (HTTP 429), so requests are spaced out and
+    retried; if it still refuses, the company shows an error and nothing is closed."""
     phrases = board if isinstance(board, list) else [board]
     base = "https://apply.careers.microsoft.com"
     seen = {}
     for phrase in phrases:
         for page in range(pages):
             if seen or page:
-                time.sleep(pause)
-            r = requests.get(f"{base}/api/pcsx/search", headers=HEADERS, timeout=TIMEOUT, params={
+                sleep(pause)
+            r = _get_patiently(f"{base}/api/pcsx/search", sleep=sleep, params={
                 "domain": "microsoft.com", "query": phrase, "location": "United States", "start": page * 10})
             r.raise_for_status()
             positions = (r.json().get("data") or {}).get("positions") or []
@@ -198,6 +250,37 @@ def fetch_microsoft(board, prefs, pages=10, pause=1.0):
             if len(positions) < 10:
                 break
     return list(seen.values())
+
+
+def _pay_greenhouse(company, posting):
+    r = requests.get(f"https://boards-api.greenhouse.io/v1/boards/{company['board']}/jobs/{posting['id']}",
+                     params={"pay_transparency": "true"}, headers=HEADERS, timeout=TIMEOUT)
+    r.raise_for_status()
+    d = r.json()
+    tops = [x["max_cents"] / 100 for x in d.get("pay_input_ranges") or []
+            if x.get("max_cents") and (x.get("currency_type") or "USD") == "USD"]
+    tops = [t for t in tops if t >= 30_000]   # skip hourly ranges
+    return int(max(tops)) if tops else pay_from_text(d.get("content"))
+
+
+def _pay_workday(company, posting):
+    tenant, wd, site = company["board"].split("|")
+    base = f"https://{tenant}.{wd}.myworkdayjobs.com"
+    path = posting["url"].split(f"{base}/{site}", 1)[-1]
+    r = requests.get(f"{base}/wday/cxs/{tenant}/{site}{path}", headers=HEADERS, timeout=TIMEOUT)
+    r.raise_for_status()
+    return pay_from_text(r.json().get("jobPostingInfo", {}).get("jobDescription"))
+
+
+# Not Microsoft: its titles always state a level (Product Manager II, Senior, Principal),
+# and its site rate-limits too hard for per-posting lookups.
+PAY_LOOKUPS = {"greenhouse": _pay_greenhouse, "workday": _pay_workday}
+
+
+def lookup_pay(company, posting):
+    """Highest annual pay on one posting's page, or None (not stated, or this ATS isn't supported)."""
+    fn = PAY_LOOKUPS.get(company.get("ats"))
+    return fn(company, posting) if fn else None
 
 
 FETCHERS = {

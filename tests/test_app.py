@@ -276,3 +276,18 @@ def test_pause_resume_remove_company(client, conn):
 
     r = client.post("/companies/remove", data={"name": "Nonexistent"}, follow_redirects=True)
     assert b"edit it there by hand" in r.data
+
+
+def test_run_check_pay_lookup_is_cached(conn, monkeypatch):
+    """A plain 'Product Manager' with high pay on its page makes the Radar; the page is read once."""
+    from radar import run
+    posting = {"id": "77", "title": "Product Manager, Payments", "location": "Remote US",
+               "url": "https://example.com/77", "posted": db.today()}
+    monkeypatch.setattr(run, "fetch_company", lambda co, prefs: [posting] if co["name"] == "Stripe" else [])
+    calls = []
+    monkeypatch.setattr(run, "lookup_pay", lambda co, p: calls.append(p["id"]) or 280000)
+    run.run_check()
+    run.run_check()
+    row = conn.execute("SELECT fit, fit_reason FROM jobs WHERE job_key='Stripe|77'").fetchone()
+    assert row["fit"] == "High" and "pays up to $280K" in row["fit_reason"]
+    assert calls == ["77"]

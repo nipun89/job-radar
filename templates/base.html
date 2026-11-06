@@ -25,7 +25,7 @@
   <div class="run">
     {% if last_run %}<span class="muted small">Last check {{ last_run.run_at[5:16].replace('T', ' ') }}</span>{% endif %}
     <form method="post" action="{{ url_for('run_now') }}"
-          onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').textContent='Checking… (about a minute)';">
+          onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').textContent='Checking… (can take a few minutes)';">
       <input type="hidden" name="next" value="{{ request.full_path }}">
       <button class="btn">Run check now</button>
     </form>

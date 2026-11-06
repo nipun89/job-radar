@@ -68,6 +68,8 @@ preferences:
   preferred_locations: [Seattle, Remote]
 ```
 
+**Titles without a level.** Many companies post a plain "Product Manager" and decide the level after interviews. `min_pay_without_seniority: 250000` keeps such a role anyway when its stated pay range reaches that much (read from the feed, or from the posting's page for Greenhouse and Workday). Titles that state a lower level, listed in `lower_level_keywords` (e.g. Senior), never qualify.
+
 **Adding a company.** Dashboard → Companies → **+ Add a company**. Type the name and, ideally, paste a link to one of its job postings (or its careers page). **Check** finds its public jobs feed and fetches it once, showing how many postings it has and how many match your filters; **Add** then writes the line to `config.yaml` for you.
 
 To add one by hand instead, open any job on the company's site and look at the link:

@@ -10,6 +10,13 @@ preferences:
   role_keywords: [product manager, pm-t, product management, product lead, head of product, director of product, product director, group product]
   # ...and one of these to count as senior enough (a company can opt out with skip_seniority: true)
   seniority_keywords: [staff, principal, lead, group, director, head of, senior staff]
+  # Safety catch: a title with no seniority word still counts if the posting's top pay is at least
+  # this much (annual USD), since a plain "Product Manager" at that pay is often levelled after
+  # interviews. Pay comes from the feed (Ashby, Lever) or the posting's page (Greenhouse, Workday).
+  # Remove the line to turn it off.
+  min_pay_without_seniority: 250000
+  # ...but never for titles that state a level below yours (whole-word match)
+  lower_level_keywords: [senior, sr]
   # Titles containing any of these are dropped (whole-word match)
   title_exclude: [associate, intern, product marketing, marketing manager, designer, engineer, analyst, product operations, recruiter, counsel, data scientist]
   # The area you know best. Any hit in the title marks the role "High" fit; everything else is "Medium".
