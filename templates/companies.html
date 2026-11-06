@@ -4,14 +4,59 @@
 
 <div class="page-head">
   <h1>Companies</h1>
-  <p class="muted">To add, pause or remove a company, edit <code>{{ config_path }}</code>, then click <b>Run check now</b>. Companies you add to your Pipeline are added to config.yaml automatically (marked <code>auto: true</code> at the bottom). Pause or edit them like any other line.</p>
+  <p class="muted">Add, pause or remove companies here. Other edits (LinkedIn names, <code>exclude</code>, <code>only_contacts</code>) go in <code>{{ config_path }}</code>. Companies in your Pipeline are tracked automatically; pause those rather than remove them, or they'll be added back.</p>
 </div>
 
-<table class="grid">
-  <thead><tr><th>Company</th><th>Source</th><th>Last result</th><th>Last checked</th><th>Counts contacts at</th></tr></thead>
+<details class="add-form" {{ 'open' if preview or form }}>
+  <summary>+ Add a company</summary>
+  <form method="post" action="{{ url_for('companies_check') }}" class="add-grid">
+    <label>Company name <input name="name" required value="{{ form.name or '' }}" placeholder="e.g. Mercury"></label>
+    <label class="span2">Job link or careers page <span class="muted">(optional, helps a lot)</span>
+      <input name="link" value="{{ form.link or '' }}" placeholder="any job posting link, or their careers page"></label>
+    <label>Names on LinkedIn <span class="muted">(comma-separated)</span>
+      <input name="match" value="{{ form.match or '' }}" placeholder="defaults to the company name"></label>
+    <label class="check"><span><input type="checkbox" name="skip_seniority" value="1" {{ 'checked' if form.skip_seniority }}> Don't require a seniority word</span></label>
+    <div><button class="btn">Check</button></div>
+  </form>
+  <p class="muted small hint">Check looks for a public jobs feed (Greenhouse, Ashby, Lever, Workday) from the link, then the page it points to, then the company name, and fetches it once. Nothing is saved until you click Add.</p>
+
+  {% if preview %}
+  <div class="preview">
+    {% set res = preview.result %}
+    {% if preview.feed and res.ok %}
+      <p class="status-ok">Found its {{ preview.feed[0]|title }} feed (<code>{{ preview.feed[1] }}</code>): {{ res.scanned }} postings, {{ res.matched }} match your filters.</p>
+      {% if res.sample %}<p class="small muted">{{ 'Matching' if res.matched else 'No matches today. Sample postings' }}: {{ res.sample|join(' · ') }}</p>{% endif %}
+      {% if res.scanned and not res.matched %}<p class="small muted">If it posts plain "Product Manager" titles, tick "Don't require a seniority word" and check again.</p>{% endif %}
+    {% elif preview.feed %}
+      <p class="status-error">Found a {{ preview.feed[0]|title }} feed (<code>{{ preview.feed[1] }}</code>) but couldn't read it: {{ res.error }}</p>
+    {% else %}
+      <p class="status-muted"><b>No public jobs feed found.</b> It can still be added as <i>Check by hand</i>: it gets a link on the Radar, and your contacts there are counted. Pasting a link to one of its job postings usually finds the feed.</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('companies_add') }}" class="inline-actions">
+      <input type="hidden" name="name" value="{{ form.name }}">
+      <input type="hidden" name="link" value="{{ form.link }}">
+      <input type="hidden" name="match" value="{{ preview.match|join(', ') }}">
+      {% if form.skip_seniority %}<input type="hidden" name="skip_seniority" value="1">{% endif %}
+      {% if preview.feed and res.ok %}
+        <input type="hidden" name="ats" value="{{ preview.feed[0] }}">
+        <input type="hidden" name="board" value="{{ preview.feed[1] }}">
+        <button class="btn">Add {{ form.name }}</button>
+      {% else %}
+        <input type="hidden" name="ats" value="manual">
+        <button class="btn secondary">Add as Check by hand</button>
+      {% endif %}
+      <span class="small muted">Counts contacts at: {{ preview.match|join(', ') }}</span>
+      <a class="small" href="{{ url_for('companies_page') }}">Cancel</a>
+    </form>
+  </div>
+  {% endif %}
+</details>
+
+<table class="grid" style="margin-top:8px">
+  <thead><tr><th>Company</th><th>Source</th><th>Last result</th><th>Last checked</th><th>Counts contacts at</th><th></th></tr></thead>
   <tbody>
   {% for r in rows %}
-    <tr>
+    <tr class="{{ 'closed' if r.co.paused }}">
       <td class="nowrap">
         <b>{{ r.co.name }}</b>{% if r.co.auto %} <span class="tag new" title="Tracked because it's in your Pipeline">from Pipeline</span>{% endif %}
         {% if r.co.url %}<div class="small"><a href="{{ r.co.url }}" target="_blank" rel="noopener">careers page</a></div>{% endif %}
@@ -22,6 +67,20 @@
       <td class="small">
         {{ (r.co.match or [r.co.name])|join(', ') }}
         {% if r.co.only_contacts %}<div class="muted">only: {{ r.co.only_contacts|join(', ') }}</div>{% endif %}
+      </td>
+      <td class="nowrap row-actions">
+        <form method="post" action="{{ url_for('companies_pause') }}" class="inline">
+          <input type="hidden" name="name" value="{{ r.co.name }}">
+          <input type="hidden" name="paused" value="{{ '0' if r.co.paused else '1' }}">
+          <button class="btn small-btn">{{ 'Resume' if r.co.paused else 'Pause' }}</button>
+        </form>
+        {% if not r.co.auto %}
+        <form method="post" action="{{ url_for('companies_remove') }}" class="inline"
+              onsubmit='return confirm("Remove " + {{ r.co.name|tojson }} + " from config.yaml?");'>
+          <input type="hidden" name="name" value="{{ r.co.name }}">
+          <button class="link-btn" title="Remove from config.yaml">✕</button>
+        </form>
+        {% endif %}
       </td>
     </tr>
   {% endfor %}

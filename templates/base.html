@@ -20,7 +20,7 @@
     <a href="{{ url_for('radar_page') }}" class="{{ 'active' if request.endpoint == 'radar_page' }}">Radar <span class="count">{{ nav_radar }}</span></a>
     <a href="{{ url_for('pipeline_page') }}" class="{{ 'active' if request.endpoint == 'pipeline_page' }}">Pipeline <span class="count">{{ nav_pipeline }}</span></a>
     <a href="{{ url_for('contacts_page') }}" class="{{ 'active' if request.endpoint == 'contacts_page' }}">Contacts</a>
-    <a href="{{ url_for('companies_page') }}" class="{{ 'active' if request.endpoint == 'companies_page' }}">Companies</a>
+    <a href="{{ url_for('companies_page') }}" class="{{ 'active' if request.endpoint in ('companies_page', 'companies_check') }}">Companies</a>
   </nav>
   <div class="run">
     {% if last_run %}<span class="muted small">Last check {{ last_run.run_at[5:16].replace('T', ' ') }}</span>{% endif %}

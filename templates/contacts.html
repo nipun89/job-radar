@@ -13,12 +13,36 @@
     <button class="btn secondary">Search</button>
     {% if q %}<a class="small" href="{{ url_for('contacts_page') }}">Clear</a>{% endif %}
   </form>
+  {% if csv_exists %}
   <form method="post" action="{{ url_for('contacts_import') }}">
-    <button class="btn secondary" {{ 'disabled' if not csv_exists }} title="{{ csv_path }}">Re-import Connections.csv</button>
+    <button class="btn secondary" title="{{ csv_path }}">Re-import Connections.csv</button>
   </form>
+  {% endif %}
 </div>
 
-<p class="muted small">{{ rows|length }} contact{{ '' if rows|length == 1 else 's' }}</p>
+<details class="add-form" {{ 'open' if not rows and not q }}>
+  <summary>+ Add contacts</summary>
+  <form method="post" action="{{ url_for('contacts_add') }}" class="add-grid">
+    <label>First name <input name="first_name" required></label>
+    <label>Last name <input name="last_name"></label>
+    <label class="span2">LinkedIn profile link <input name="url" required placeholder="https://www.linkedin.com/in/..."></label>
+    <label>Their company <input name="company" required placeholder="as LinkedIn shows it"></label>
+    <label>Position <input name="position"></label>
+    <label>How I know <input name="how_i_know" placeholder="e.g. worked together at Stripe"></label>
+    <label>Strength
+      <select name="strength">{% for s in strengths %}<option value="{{ s }}">{{ s or '—' }}</option>{% endfor %}</select>
+    </label>
+    <div><button class="btn">Add contact</button></div>
+  </form>
+  <form method="post" action="{{ url_for('contacts_upload') }}" enctype="multipart/form-data" class="upload-row">
+    <b class="small">Or upload all your connections:</b>
+    <input type="file" name="csv" accept=".csv" required>
+    <button class="btn secondary">Upload &amp; import</button>
+    <span class="small muted">LinkedIn → Settings &amp; Privacy → Data privacy → Get a copy of your data → Connections. Re-uploading updates companies and positions and keeps your notes.</span>
+  </form>
+</details>
+
+<p class="muted small" style="margin-top:8px">{{ rows|length }} contact{{ '' if rows|length == 1 else 's' }}</p>
 
 <table class="grid">
   <thead><tr><th>Tracked as</th><th>Name</th><th>Their company</th><th>Position</th><th>How I know</th><th>Strength</th><th></th></tr></thead>

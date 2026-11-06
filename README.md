@@ -68,7 +68,9 @@ preferences:
   preferred_locations: [Seattle, Remote]
 ```
 
-**Adding a company.** Open any job on the company's site and look at the link:
+**Adding a company.** Dashboard → Companies → **+ Add a company**. Type the name and, ideally, paste a link to one of its job postings (or its careers page). **Check** finds its public jobs feed and fetches it once, showing how many postings it has and how many match your filters; **Add** then writes the line to `config.yaml` for you.
+
+To add one by hand instead, open any job on the company's site and look at the link:
 
 | Job link looks like | Add this line under `companies:` |
 |---|---|
@@ -85,8 +87,9 @@ preferences:
 ## Your LinkedIn contacts
 
 1. LinkedIn → Settings & Privacy → Data privacy → Get a copy of your data → **Connections**.
-2. Save the file as `data/Connections.csv`.
-3. Dashboard → Contacts → **Import Connections.csv**. Re-import any time; your notes are kept.
+2. Dashboard → Contacts → **+ Add contacts** → choose the file → **Upload & import**. Re-upload any time; your notes are kept.
+
+You can also add people one at a time there (name, company, LinkedIn profile link).
 
 ## How it works
 

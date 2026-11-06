@@ -1,9 +1,10 @@
 """LinkedIn Connections.csv import and contact-to-company matching.
 
 Export from LinkedIn: Settings > Data privacy > Get a copy of your data > Connections.
-Drop the file at data/Connections.csv, then click "Import Connections.csv" in the dashboard.
+Upload it on the Contacts page (it is saved as data/Connections.csv so it can be re-imported).
 """
 import csv
+import io
 import re
 
 from radar import db
@@ -20,7 +21,12 @@ COLUMNS = {
 def read_connections(path=CSV_PATH):
     """Read the export, skipping LinkedIn's 'Notes:' lines above the real header row."""
     with open(path, encoding="utf-8-sig", newline="") as f:
-        rows = list(csv.reader(f))
+        return parse_connections(f.read())
+
+
+def parse_connections(text):
+    """Same as read_connections, from the file's text (e.g. an upload)."""
+    rows = list(csv.reader(io.StringIO(text.lstrip("﻿"))))
     start = next((i for i, r in enumerate(rows) if r and r[0].strip() == "First Name"), None)
     if start is None:
         raise ValueError("Couldn't find the 'First Name' header row in Connections.csv")

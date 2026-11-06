@@ -15,9 +15,11 @@ from datetime import date, timedelta
 from flask import Flask, flash, g, redirect, render_template, request, url_for
 
 from radar import db, pipeline
-from radar.contacts import CSV_PATH, contacts_by_company, contacts_for_name, import_connections
+from radar.contacts import (CSV_PATH, company_matches, contacts_by_company, contacts_for_name,
+                            import_connections, parse_connections)
 from radar.run import format_summary, run_check
-from radar.tracking import refresh_feeds
+from radar.tracking import (add_company, company_line, find_feed, refresh_feeds, remove_company,
+                            set_paused, verify_feed)
 
 PORT = int(os.environ.get("JOB_RADAR_PORT", "5050"))
 app = Flask(__name__)
@@ -46,15 +48,16 @@ def back(default_endpoint):
 
 
 def radar_jobs(config):
-    """Jobs not yet in the pipeline (linked, or added by hand with the same link), excluding paused companies."""
-    paused = {co["name"] for co in config["companies"] if co.get("paused")}
+    """Jobs not yet in the pipeline (linked, or added by hand with the same link), for companies
+    still in config.yaml and not paused."""
+    active = {co["name"] for co in config["companies"] if not co.get("paused")}
     rows = conn().execute(
         """SELECT * FROM jobs
            WHERE job_key NOT IN (SELECT job_key FROM pipeline WHERE job_key IS NOT NULL)
              AND url NOT IN (SELECT url FROM pipeline WHERE url <> '')
            ORDER BY date_found DESC, CASE fit WHEN 'High' THEN 0 ELSE 1 END, date_posted DESC"""
     )
-    return [dict(r) for r in rows if r["company"] not in paused]
+    return [dict(r) for r in rows if r["company"] in active]
 
 
 @app.context_processor
@@ -221,6 +224,45 @@ def contacts_update():
     return back("contacts_page")
 
 
+@app.post("/contacts/add")
+def contacts_add():
+    f = {k: request.form.get(k, "").strip() for k in
+         ("first_name", "last_name", "url", "company", "position", "how_i_know", "strength")}
+    if not f["first_name"] or not f["company"] or "linkedin.com/in/" not in f["url"]:
+        flash("First name, company and their LinkedIn profile link (linkedin.com/in/...) are all needed.", "error")
+        return redirect(url_for("contacts_page"))
+    f["url"] = f["url"].split("?")[0].rstrip("/")
+    if conn().execute("SELECT 1 FROM contacts WHERE url=?", (f["url"],)).fetchone():
+        flash(f"{f['first_name']} {f['last_name']} is already in your contacts.", "error")
+        return redirect(url_for("contacts_page"))
+    db.upsert_contact(conn(), {**f, "connected_on": "", "email": ""})
+    db.update_contact(conn(), f["url"], f["how_i_know"], f["strength"] if f["strength"] in db.STRENGTHS else "")
+    tracked = [co["name"] for co in db.load_config()["companies"]
+               if company_matches(f["company"], co.get("match") or [co["name"]], co.get("exclude") or [])]
+    flash(f"Added {f['first_name']} {f['last_name']}." + (
+        "" if tracked else f" {f['company']} isn't a tracked company, so they won't show in this list until you add it on the Companies page."))
+    return redirect(url_for("contacts_page"))
+
+
+@app.post("/contacts/upload")
+def contacts_upload():
+    upload = request.files.get("csv")
+    if not upload or not upload.filename:
+        flash("Choose your LinkedIn Connections.csv file first.", "error")
+        return redirect(url_for("contacts_page"))
+    text = upload.read().decode("utf-8-sig", errors="replace")
+    try:
+        count = len(parse_connections(text))
+    except ValueError as e:
+        flash(f"That doesn't look like LinkedIn's Connections.csv: {e}", "error")
+        return redirect(url_for("contacts_page"))
+    CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CSV_PATH.write_text(text, encoding="utf-8")   # kept so "Re-import" works later
+    import_connections(conn(), CSV_PATH)
+    flash(f"Imported {count} connections. Your 'how I know' and strength notes were kept.")
+    return redirect(url_for("contacts_page"))
+
+
 @app.post("/contacts/import")
 def contacts_import():
     if not CSV_PATH.exists():
@@ -233,7 +275,7 @@ def contacts_import():
 # ---------- Companies ----------
 
 @app.get("/companies")
-def companies_page():
+def companies_page(preview=None, form=None):
     config = db.load_config()
     results = {r["company"]: dict(r) for r in conn().execute("SELECT * FROM company_results")}
     rows = []
@@ -250,7 +292,80 @@ def companies_page():
         else:
             state, text = "error", f"Error: {r['error']}"
         rows.append({"co": co, "state": state, "text": text, "checked": r["run_at"] if r else ""})
-    return render_template("companies.html", rows=rows, config_path=db.CONFIG_PATH)
+    return render_template("companies.html", rows=rows, config_path=db.CONFIG_PATH, preview=preview,
+                           form=form or {})
+
+
+def _split(text):
+    return [x.strip() for x in (text or "").split(",") if x.strip()]
+
+
+def _already_tracked(config, name):
+    n = name.lower()
+    return next((co["name"] for co in config["companies"]
+                 if co["name"].lower() == n or n in (m.lower() for m in co.get("match") or [])), None)
+
+
+@app.post("/companies/check")
+def companies_check():
+    """Step 1 of adding a company: find its jobs feed and fetch it once, without saving anything."""
+    config = db.load_config()
+    form = {k: request.form.get(k, "").strip() for k in ("name", "link", "match")}
+    form["skip_seniority"] = bool(request.form.get("skip_seniority"))
+    if not form["name"]:
+        flash("Company name is needed.", "error")
+        return redirect(url_for("companies_page"))
+    existing = _already_tracked(config, form["name"])
+    if existing:
+        flash(f"{form['name']} is already tracked (as {existing}).", "error")
+        return redirect(url_for("companies_page"))
+    feed = find_feed(form["name"], form["link"])
+    preview = {"feed": feed, "result": verify_feed(feed, config["preferences"], form["skip_seniority"]) if feed else None,
+               "match": _split(form["match"]) or [form["name"]]}
+    return companies_page(preview=preview, form=form)
+
+
+@app.post("/companies/add")
+def companies_add():
+    """Step 2: write the checked company to config.yaml."""
+    f = request.form
+    name = f.get("name", "").strip()
+    if not name or _already_tracked(db.load_config(), name):
+        flash("Nothing added: no name, or that company is already tracked.", "error")
+        return redirect(url_for("companies_page"))
+    ats = f.get("ats", "manual")
+    link = f.get("link", "").strip()
+    add_company(company_line(name, ats, board=f.get("board", ""), url=link if link.startswith("http") else "",
+                             match=_split(f.get("match")), skip_seniority=bool(f.get("skip_seniority"))))
+    flash(f"Added {name} to config.yaml. " + ("Click Run check now to pull its roles onto the Radar." if ats != "manual"
+          else "It's listed under Check by hand on the Radar."))
+    return redirect(url_for("companies_page"))
+
+
+HAND_EDIT = "Its entry in config.yaml isn't a one-line {name: ...} entry, so edit it there by hand."
+
+
+@app.post("/companies/pause")
+def companies_pause():
+    name, pause = request.form["name"], request.form.get("paused") == "1"
+    if set_paused(name, pause):
+        flash(f"Paused {name}: not fetched, and its roles are hidden from the Radar." if pause
+              else f"Resumed {name}. Click Run check now to pull its roles.")
+    else:
+        flash(HAND_EDIT, "error")
+    return redirect(url_for("companies_page"))
+
+
+@app.post("/companies/remove")
+def companies_remove():
+    name = request.form["name"]
+    if remove_company(name):
+        conn().execute("DELETE FROM company_results WHERE company=?", (name,))
+        conn().commit()
+        flash(f"Removed {name}. Its roles are hidden from the Radar; anything in your Pipeline stays.")
+    else:
+        flash(HAND_EDIT, "error")
+    return redirect(url_for("companies_page"))
 
 
 # ---------- Run check now ----------

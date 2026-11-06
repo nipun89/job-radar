@@ -43,13 +43,14 @@ def _get_json(url):
         return None
 
 
-# Feed addresses that can be read straight from a job link you saved
+# Feed addresses that can be read straight from a job link or a board's own page
 _URL_PATTERNS = [
-    ("workday", re.compile(r"https?://([\w-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?([\w-]+)/"),
+    ("workday", re.compile(r"https?://([\w-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?(?!wday/)([\w-]+)"),
      lambda m: f"{m.group(1)}|{m.group(2)}|{m.group(3)}"),
-    ("greenhouse", re.compile(r"greenhouse\.io/([\w-]+)/jobs/"), lambda m: m.group(1)),
-    ("ashby", re.compile(r"jobs\.ashbyhq\.com/([\w-]+)/"), lambda m: m.group(1)),
-    ("lever", re.compile(r"jobs\.lever\.co/([\w-]+)/"), lambda m: m.group(1)),
+    ("greenhouse", re.compile(r"greenhouse\.io/embed/job_board(?:/js)?\?for=([\w-]+)"), lambda m: m.group(1)),
+    ("greenhouse", re.compile(r"(?:boards|job-boards)\.(?:eu\.)?greenhouse\.io/(?!embed)([\w-]+)"), lambda m: m.group(1)),
+    ("ashby", re.compile(r"jobs\.ashbyhq\.com/([\w-]+)"), lambda m: m.group(1)),
+    ("lever", re.compile(r"jobs\.lever\.co/([\w-]+)"), lambda m: m.group(1)),
 ]
 
 
@@ -82,6 +83,41 @@ def detect_feed(name, urls=()):
     return None
 
 
+def feed_from_page(url):
+    """Open a careers page and look for a link or embed pointing at a known ATS
+    (many company sites embed Greenhouse or link out to Workday)."""
+    if not (url or "").startswith("http"):
+        return None
+    try:
+        r = requests.get(url, headers={**HEADERS, "User-Agent": "Mozilla/5.0 (job-radar)"}, timeout=TIMEOUT)
+    except requests.RequestException:
+        return None
+    return feed_from_urls([r.url, r.text]) if r.ok else feed_from_urls([r.url])
+
+
+def find_feed(name, link=""):
+    """Everything we know how to try, for the Companies page: the link itself,
+    then the page it points to, then board-name guesses from the company name."""
+    return feed_from_urls([link]) or feed_from_page(link) or detect_feed(name)
+
+
+def verify_feed(feed, prefs, skip_seniority=False):
+    """Fetch the feed once. Returns {ok, scanned, matched, sample, error}."""
+    from radar.fetchers import fetch_company
+    from radar.filters import evaluate
+    try:
+        postings = fetch_company({"name": "?", "ats": feed[0], "board": feed[1]}, prefs)
+    except Exception as e:
+        return {"ok": False, "scanned": 0, "matched": 0, "sample": [], "error": f"{type(e).__name__}: {e}"[:300]}
+    hits = [p["title"] for p in postings
+            if evaluate(p["title"], p["location"], prefs, skip_seniority=skip_seniority)[0]]
+    # No matches: show role-looking titles instead, so you can see why (e.g. no seniority word)
+    near = [p["title"] for p in postings
+            if any(k in p["title"].lower() for k in prefs.get("role_keywords", []))]
+    return {"ok": True, "scanned": len(postings), "matched": len(hits),
+            "sample": (hits or near or [p["title"] for p in postings])[:5], "error": None}
+
+
 AUTO_HEADER = "  # ---- Added automatically from your Pipeline (edit or pause like any other line) ----"
 
 
@@ -96,6 +132,77 @@ def config_line(name, feed):
         return f"  - {{name: {_q(name)}, ats: {ats}, board: {_q(board)}, match: [{_q(name)}], auto: true}}"
     url = "https://www.google.com/search?q=" + quote_plus(f"{name} careers product manager")
     return f"  - {{name: {_q(name)}, ats: manual, url: {_q(url)}, match: [{_q(name)}], auto: true}}"
+
+
+def company_line(name, ats, board="", url="", match=(), skip_seniority=False):
+    """One config.yaml line for a company added on the Companies page."""
+    parts = [f"name: {_q(name)}", f"ats: {ats}"]
+    if ats == "manual":
+        parts.append(f"url: {_q(url or 'https://www.google.com/search?q=' + quote_plus(name + ' careers'))}")
+    else:
+        parts.append(f"board: {_q(board)}")
+    parts.append("match: [" + ", ".join(_q(m) for m in (match or [name])) + "]")
+    if skip_seniority:
+        parts.append("skip_seniority: true")
+    return "  - {" + ", ".join(parts) + "}"
+
+
+def add_company(line):
+    """Add a line to the end of your own company list: above the auto-added block
+    if there is one, so that block stays at the bottom. Nothing else is rewritten."""
+    text = db.CONFIG_PATH.read_text(encoding="utf-8").rstrip(NL)
+    i = text.find(AUTO_HEADER)
+    if i == -1:
+        _write_config(text + NL + line + NL)
+    else:
+        _write_config(text[:i].rstrip(NL) + NL + line + NL + NL + text[i:] + NL)
+
+
+def _company_line_index(lines, name):
+    """Index of the one-line `- {name: ..., ...}` entry for `name`, else None."""
+    for i, line in enumerate(lines):
+        if not line.lstrip().startswith("- {"):
+            continue
+        try:
+            entry = yaml.safe_load(line.strip())[0]
+        except (yaml.YAMLError, IndexError, TypeError, KeyError):
+            continue
+        if isinstance(entry, dict) and str(entry.get("name", "")).lower() == name.lower():
+            return i
+    return None
+
+
+def _edit_company(name, change):
+    """Apply change(line) -> new line or None (= delete) to a company's line.
+    Returns False if its entry isn't on one line (then it must be edited by hand)."""
+    lines = db.CONFIG_PATH.read_text(encoding="utf-8").split(NL)
+    i = _company_line_index(lines, name)
+    if i is None:
+        return False
+    new = change(lines[i])
+    if new is None:
+        del lines[i]
+    else:
+        lines[i] = new
+    _write_config(NL.join(lines))
+    return True
+
+
+_PAUSED = re.compile(r",\s*paused:\s*(true|false|yes|no)\b", re.IGNORECASE)
+
+
+def set_paused(name, paused):
+    def change(line):
+        line = _PAUSED.sub("", line)
+        if paused:
+            end = line.rindex("}")   # before any trailing comment
+            line = line[:end].rstrip() + ", paused: true" + line[end:]
+        return line
+    return _edit_company(name, change)
+
+
+def remove_company(name):
+    return _edit_company(name, lambda line: None)
 
 
 def _write_config(new_text):
