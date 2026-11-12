@@ -65,4 +65,6 @@ companies:
   # Amazon and Microsoft have their own search APIs: board = a list of search phrases
   #   e.g. {name: Microsoft, ats: microsoft, board: [principal product manager], match: [Microsoft]}
   - {name: Amazon,      ats: amazon,     board: [principal product manager payments, principal product manager fintech], match: [Amazon, Amazon Web Services, AWS]}
-  - {name: Google,      ats: manual,     url: "https://www.google.com/about/careers/applications/jobs/results/?q=%22product%20manager%22", match: [Google]}
+  - {name: Google,      ats: manual,     url: "https://www.google.com/about/careers/applications/jobs/results/?q=%22product%20manager%22", match: [Google]}   # robots.txt asks scripts not to read it
+  - {name: American Express, ats: manual, url: "https://www.americanexpress.com/en-us/careers/", match: [American Express, Amex]}   # job list loads with JavaScript
+  - {name: Shopify,     ats: manual,     url: "https://www.shopify.com/careers", match: [Shopify]}   # job list loads with JavaScript

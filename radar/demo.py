@@ -83,6 +83,10 @@ def seed(conn):
     pipeline.add_manual(conn, "Northwind Lending", "Head of Product", url="https://example.com/northwind",
                         stage="Applied", date_applied=_ago(5), notes="Found via a newsletter.", at=_ago(5))
 
+    # Check by hand: one looked at recently, one a while ago (Shopify stays "never checked")
+    conn.executemany("INSERT OR REPLACE INTO manual_checks (company, checked_on) VALUES (?,?)",
+                     [("Google", _ago(2)), ("American Express", _ago(9))])
+
     conn.execute("INSERT INTO runs (run_at, companies_checked, postings_scanned, new_matches, errors) VALUES (?,?,?,?,?)",
                  (_ago(0) + "T07:00:12", 16, 1874, 3, None))
     conn.commit()
