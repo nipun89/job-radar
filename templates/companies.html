@@ -59,7 +59,8 @@
     <tr class="{{ 'closed' if r.co.paused }}">
       <td class="nowrap">
         <b>{{ r.co.name }}</b>{% if r.co.auto %} <span class="tag new" title="Tracked because it's in your Pipeline">from Pipeline</span>{% endif %}
-        {% if r.co.url %}<div class="small"><a href="{{ r.co.url }}" target="_blank" rel="noopener">careers page</a></div>{% endif %}
+        {% set page_link = r.co.url or (r.co.board if r.co.ats == 'page' else '') %}
+        {% if page_link %}<div class="small"><a href="{{ page_link }}" target="_blank" rel="noopener">careers page</a></div>{% endif %}
       </td>
       <td class="small">{{ r.co.ats }}</td>
       <td class="small status-{{ r.state }}">{{ r.text }}</td>

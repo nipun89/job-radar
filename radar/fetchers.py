@@ -6,7 +6,8 @@
 For the rest, lookup_pay() reads one posting's page. The daily run only calls it for
 postings that pass every filter except seniority, and caches the answer.
 
-These all read public JSON feeds. No HTML scraping, and never LinkedIn.
+These all read public JSON feeds, except `page` (radar/pages.py), which reads the job
+list off a careers page for companies with no feed. Never LinkedIn.
 """
 import html
 import re
@@ -14,6 +15,8 @@ import time
 from datetime import date, datetime, timedelta, timezone
 
 import requests
+
+from radar.pages import fetch_page
 
 TIMEOUT = 20
 HEADERS = {"User-Agent": "job-radar/1.0", "Accept": "application/json"}
@@ -252,6 +255,61 @@ def fetch_microsoft(board, prefs, pages=5, pause=3.0, sleep=time.sleep):
     return list(seen.values())
 
 
+def fetch_atlassian(board, prefs):
+    """Atlassian's own careers site, which serves its whole job list as JSON. board is unused."""
+    r = requests.get("https://www.atlassian.com/endpoint/careers/listings", headers=HEADERS, timeout=TIMEOUT)
+    r.raise_for_status()
+    out = []
+    for j in r.json():
+        # "Seattle - United States -   Seattle,  98101 United States" -> "Seattle - United States"
+        locs = [re.sub(r"\s+-\s+[^-]*$", "", l).strip() if l.count(" - ") > 1 else l.strip()
+                for l in j.get("locations") or []]
+        out.append({
+            "id": str(j["id"]),
+            "title": j.get("title", ""),
+            "location": "; ".join(l for l in locs if l),
+            "url": (j.get("portalJobPost") or {}).get("portalUrl") or f"https://www.atlassian.com/company/careers/details/{j['id']}",
+            "posted": None,
+        })
+    return out
+
+
+def fetch_workable(board, prefs):
+    """Workable job boards (apply.workable.com/<board>)."""
+    r = requests.get(f"https://apply.workable.com/api/v1/widget/accounts/{board}", headers=HEADERS, timeout=TIMEOUT)
+    r.raise_for_status()
+    out = []
+    for j in r.json().get("jobs", []):
+        places = [", ".join(x for x in (l.get("city"), l.get("region"), l.get("country")) if x)
+                  for l in j.get("locations") or []] or [", ".join(x for x in (j.get("city"), j.get("state"), j.get("country")) if x)]
+        if j.get("telecommuting"):
+            places.append("Remote")
+        out.append({
+            "id": j.get("shortcode") or j.get("url"),
+            "title": j.get("title", ""),
+            "location": "; ".join(p for p in dict.fromkeys(places) if p),
+            "url": j.get("url") or f"https://apply.workable.com/{board}/j/{j.get('shortcode')}",
+            "posted": (j.get("published_on") or "")[:10] or None,
+        })
+    return out
+
+
+def fetch_dejobs(board, prefs):
+    """Career sites run by DirectEmployers (board = the site's host, e.g. careers.alaskaair.com),
+    which publish every job as a JSON feed."""
+    r = requests.get(f"https://{board}/jobs/feed/json", params={"num_items": 1000},
+                     headers=HEADERS, timeout=TIMEOUT)
+    r.raise_for_status()
+    return [{
+        "id": j.get("guid") or j.get("reqid") or j["url"],
+        "title": j.get("title", ""),
+        "location": ", ".join(x for x in (j.get("city"), j.get("state_short") or j.get("state"), j.get("country")) if x)
+                    or j.get("location", ""),
+        "url": j.get("url", ""),
+        "posted": (j.get("date_new") or "")[:10] or None,
+    } for j in r.json()]
+
+
 def _pay_greenhouse(company, posting):
     r = requests.get(f"https://boards-api.greenhouse.io/v1/boards/{company['board']}/jobs/{posting['id']}",
                      params={"pay_transparency": "true"}, headers=HEADERS, timeout=TIMEOUT)
@@ -290,6 +348,10 @@ FETCHERS = {
     "workday": fetch_workday,
     "amazon": fetch_amazon,
     "microsoft": fetch_microsoft,
+    "atlassian": fetch_atlassian,
+    "workable": fetch_workable,
+    "dejobs": fetch_dejobs,
+    "page": fetch_page,
 }
 
 

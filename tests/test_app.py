@@ -213,6 +213,18 @@ def test_add_company_without_feed_is_manual(client, monkeypatch):
     assert (entry["ats"], entry["url"], entry["match"]) == ("manual", "https://valvesoftware.com/jobs", ["Valve Corp"])
 
 
+def test_check_by_hand_rotation(client):
+    import app as app_module
+    client.post("/companies/add", data={"name": "Valve Corp", "ats": "manual", "link": "https://valvesoftware.com"})
+    client.post("/companies/add", data={"name": "Zeta Co", "ats": "manual", "link": "https://zeta.example/jobs"})
+    assert b"never checked" in client.get("/").data
+    client.post("/manual/checked", data={"name": "Valve Corp", "next": "/"})
+    with app_module.app.test_request_context():
+        names = [m["name"] for m in app_module.manual_companies(db.load_config())]
+    assert names.index("Zeta Co") < names.index("Valve Corp")     # never-checked first, just-checked last
+    assert b"checked today" in client.get("/").data
+
+
 def test_feed_from_links():
     from radar.tracking import feed_from_urls
     assert feed_from_urls(["https://job-boards.greenhouse.io/anthropic"]) == ("greenhouse", "anthropic")

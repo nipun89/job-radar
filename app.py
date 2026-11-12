@@ -113,9 +113,28 @@ def radar_page():
     else:
         sort, direction = "", ""
 
-    manual = [co for co in config["companies"] if co.get("ats") == "manual" and not co.get("paused")]
-    return render_template("radar.html", rows=rows, f=f, companies=companies, manual=manual,
+    return render_template("radar.html", rows=rows, f=f, companies=companies, manual=manual_companies(config),
                            today=db.today(), sort=sort, direction=direction, sorts=RADAR_SORTS)
+
+
+def manual_companies(config):
+    """Check by hand companies, the one you looked at longest ago (or never) first."""
+    checked = {r["company"]: r["checked_on"] for r in conn().execute("SELECT * FROM manual_checks")}
+    out = []
+    for co in config["companies"]:
+        if co.get("ats") == "manual" and not co.get("paused"):
+            on = checked.get(co["name"])
+            days = (date.today() - date.fromisoformat(on)).days if on else None
+            out.append({"name": co["name"], "url": co.get("url", ""), "checked_on": on, "days": days})
+    return sorted(out, key=lambda m: (m["checked_on"] is not None, m["checked_on"] or "", m["name"].lower()))
+
+
+@app.post("/manual/checked")
+def manual_checked():
+    name = request.form["name"]
+    conn().execute("INSERT OR REPLACE INTO manual_checks (company, checked_on) VALUES (?,?)", (name, db.today()))
+    conn().commit()
+    return back("radar_page")
 
 
 # Sortable Radar columns: key -> (how to sort, direction used on first click)

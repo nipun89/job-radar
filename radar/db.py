@@ -1,7 +1,7 @@
 """SQLite storage: schema and small helper functions.
 
 Golden rule: the automated run never touches what the user owns:
-  the pipeline tables, contacts.how_i_know and contacts.strength.
+  the pipeline tables, manual_checks, contacts.how_i_know and contacts.strength.
 (jobs.status / notes / status_updated are left over from v1 and no longer used.)
 """
 import os
@@ -109,6 +109,12 @@ CREATE TABLE IF NOT EXISTS company_feeds (
 CREATE TABLE IF NOT EXISTS pay_cache (
     job_key    TEXT PRIMARY KEY,
     pay_max    INTEGER,
+    checked_on TEXT
+);
+
+-- When you last looked at each Check by hand company (the ✓ button on the Radar). Yours only.
+CREATE TABLE IF NOT EXISTS manual_checks (
+    company    TEXT PRIMARY KEY,
     checked_on TEXT
 );
 

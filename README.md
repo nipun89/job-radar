@@ -12,7 +12,7 @@ Job alerts on the big boards are noisy: they miss roles on company sites, can't 
 
 ## Features
 
-- **Daily check of 5 careers systems:** Greenhouse, Ashby, Lever, Workday and Amazon, plus a "check by hand" list for companies without a feed.
+- **Daily check of 8 careers systems:** Greenhouse, Ashby, Lever, Workday, Workable, Amazon, Microsoft and DirectEmployers sites. For companies with no feed, it can read the job list off the careers page or sitemap itself (`ats: page`), where the site's robots.txt allows it. Anything left goes on a "check by hand" list that shows how long since you last looked at each one.
 - **Filtering:** role keywords, seniority, excluded titles, US-only, preferred locations, and a posting-age limit. Roles in your domain are tagged **High** fit.
 - **Who you know:** import your LinkedIn `Connections.csv` and every role shows your contacts at that company, with your own notes on how you know them.
 - **Pipeline:** Interested → Applied → Interviewing → Offer, with a separate referral track (Reached out / Invite sent / Referred) and weekly progress counts.
@@ -80,6 +80,8 @@ To add one by hand instead, open any job on the company's site and look at the l
 | `jobs.ashbyhq.com/acme/...` | `- {name: Acme, ats: ashby, board: acme, match: [Acme]}` |
 | `jobs.lever.co/acme/...` | `- {name: Acme, ats: lever, board: acme, match: [Acme]}` |
 | `acme.wd5.myworkdayjobs.com/External/...` | `- {name: Acme, ats: workday, board: acme\|wd5\|External, match: [Acme]}` |
+| `apply.workable.com/acme/...` | `- {name: Acme, ats: workable, board: acme, match: [Acme]}` |
+| a careers page that lists the jobs itself | `- {name: Acme, ats: page, board: https://acme.com/careers?q=product, match: [Acme]}` |
 | anything else | `- {name: Acme, ats: manual, url: https://acme.com/careers, match: [Acme]}` |
 
 `match` lists the employer names LinkedIn might show for your contacts there (e.g. `[Block, Square, Cash App]`). Per-company options are `paused`, `exclude`, `skip_seniority` and `only_contacts`; `config.example.yaml` explains each one.
@@ -105,6 +107,7 @@ config.yaml ─► fetchers.py ─► filters.py ─► SQLite (data/jobs.db) �
 | File | Role |
 |---|---|
 | `radar/fetchers.py` | One function per careers system; each returns `{id, title, location, url, posted}` |
+| `radar/pages.py` | `ats: page`: reads the job list off a careers page or sitemap (JSON-LD, job links), only where the site's robots.txt allows |
 | `radar/filters.py` | Whole-word keyword rules, US/non-US location logic, High/Medium fit |
 | `radar/run.py` | The check: fetch → filter → insert new → mark closed → log. One broken feed never stops the run |
 | `radar/tracking.py` | Finds jobs feeds for Pipeline companies and appends them to `config.yaml` without rewriting your comments |
@@ -113,7 +116,7 @@ config.yaml ─► fetchers.py ─► filters.py ─► SQLite (data/jobs.db) �
 | `app.py` | Flask routes: one short function per page or button |
 
 **Design choices**
-- **Public feeds only.** It reads the JSON feeds companies publish for their own careers pages, follows robots.txt (which is why Google careers is check-by-hand), and never scrapes LinkedIn.
+- **Public sources only.** It reads the JSON feeds companies publish for their own careers pages and, for a few companies without one, the careers page or sitemap itself. It identifies itself as `job-radar`, follows robots.txt (which is why Google careers is check-by-hand), and never scrapes LinkedIn.
 - **Your edits are yours.** The automated check only inserts new roles and updates open/closed. It never writes to your pipeline, notes or contact annotations, and the tests enforce this.
 - **Boring tech.** Python, SQLite, Flask and server-rendered HTML. No build step, no JavaScript framework, four dependencies.
 

@@ -112,8 +112,22 @@
 {% if manual %}
 <section class="manual">
   <h2>Check by hand</h2>
-  <p class="muted small">These companies have no feed we can read. Have a look now and then.</p>
-  <p>{% for co in manual %}<a href="{{ co.url }}" target="_blank" rel="noopener">{{ co.name }}</a>{{ ' · ' if not loop.last }}{% endfor %}</p>
+  <p class="muted small">These companies have no feed we can read. Open one, look, then click ✓. The one you checked longest ago is first.</p>
+  <ul class="manual-list">
+  {% for co in manual %}
+    <li>
+      <form method="post" action="{{ url_for('manual_checked') }}" class="inline">
+        <input type="hidden" name="name" value="{{ co.name }}">
+        <input type="hidden" name="next" value="{{ request.full_path }}">
+        <button class="link-btn" title="Mark {{ co.name }} as checked today">✓</button>
+      </form>
+      <a href="{{ co.url }}" target="_blank" rel="noopener">{{ co.name }}</a>
+      <span class="small {{ 'stale' if co.days is none or co.days >= 7 else 'muted' }}">
+        {% if co.days is none %}never checked{% elif co.days == 0 %}checked today{% elif co.days == 1 %}checked yesterday{% else %}checked {{ co.days }} days ago{% endif %}
+      </span>
+    </li>
+  {% endfor %}
+  </ul>
 </section>
 {% endif %}
 

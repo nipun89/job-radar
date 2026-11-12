@@ -30,13 +30,18 @@ preferences:
   workday_search_text: product manager   # Workday boards are searched server-side with this text
 
 companies:
-  # ats: greenhouse | ashby | lever | workday | amazon | microsoft | manual
+  # ats: greenhouse | ashby | lever | workday | workable | amazon | microsoft | atlassian | dejobs | page | manual
   #   Find it from any job link on the company's site:
   #     boards.greenhouse.io/<board>/jobs/...      -> ats: greenhouse, board: <board>
   #     jobs.ashbyhq.com/<board>/...               -> ats: ashby,      board: <board>
   #     jobs.lever.co/<board>/...                  -> ats: lever,      board: <board>
   #     <tenant>.wdN.myworkdayjobs.com/<site>/...  -> ats: workday,    board: <tenant>|wdN|<site>
-  #     no feed at all                             -> ats: manual,     url: <careers page>
+  #     apply.workable.com/<board>/...             -> ats: workable,   board: <board>
+  #     no feed, but the careers page lists jobs   -> ats: page,       board: <careers page, ideally searched for your roles>
+  #     nothing readable                           -> ats: manual,     url: <careers page>
+  #   (page reads the job list off the page itself, or off the site's sitemap.xml. It only opens
+  #    pages the site's robots.txt allows, and works on sites that list jobs in the page rather than
+  #    loading them with JavaScript; the Companies page shows an error if it finds none.)
   # match: employer names (as LinkedIn shows them) that count as this company, for contacts
   # exclude: look-alike employer names to ignore
   # paused: true = stop fetching and hide its roles (contacts still shown)

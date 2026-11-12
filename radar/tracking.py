@@ -47,6 +47,10 @@ def _get_json(url):
 _URL_PATTERNS = [
     ("workday", re.compile(r"https?://([\w-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?(?!wday/)([\w-]+)"),
      lambda m: f"{m.group(1)}|{m.group(2)}|{m.group(3)}"),
+    # Same Workday feed, other address style: wd5.myworkdaysite.com/recruiting/<tenant>/<site>
+    ("workday", re.compile(r"https?://(wd\d+)\.myworkdaysite\.com/(?:[a-z]{2}-[A-Z]{2}/)?recruiting/([\w-]+)/([\w-]+)"),
+     lambda m: f"{m.group(2)}|{m.group(1)}|{m.group(3)}"),
+    ("workable", re.compile(r"apply\.workable\.com/(?!api/|j/)([\w-]+)"), lambda m: m.group(1)),
     ("greenhouse", re.compile(r"greenhouse\.io/embed/job_board(?:/js)?\?for=([\w-]+)"), lambda m: m.group(1)),
     ("greenhouse", re.compile(r"(?:boards|job-boards)\.(?:eu\.)?greenhouse\.io/(?!embed)([\w-]+)"), lambda m: m.group(1)),
     ("ashby", re.compile(r"jobs\.ashbyhq\.com/([\w-]+)"), lambda m: m.group(1)),
